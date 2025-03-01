@@ -3,7 +3,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 
 // Khởi tạo bot với quyền hạn cần thiết
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers]
 });
 
 client.once('ready', () => {
@@ -19,3 +19,13 @@ client.on('messageCreate', message => {
 
 // Đăng nhập bot với token
 client.login(process.env.TOKEN);
+
+//Welcome
+const WELCOME_CHANNEL_ID = '1345285119237296129'; 
+
+client.on('guildMemberAdd', async (member) => {
+    const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
+    if (!channel) return;
+    
+    channel.send(`🎉 Chào mừng ${member} đến với ** ${member.guild.name}**! Cảm ơn bạn đã tham gia! 🚀`);
+});
