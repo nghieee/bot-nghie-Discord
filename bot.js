@@ -1,6 +1,9 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, AttachmentBuilder, Partials } = require('discord.js');
 const { VALID_TIMEFRAMES } = require('./src/utils/constants');
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
 
 // Import các service
 const marketService = require('./src/services/market/marketService');
@@ -145,6 +148,15 @@ client.on('guildMemberAdd', async member => {
     } catch (error) {
         console.error('Lỗi khi xử lý thành viên mới:', error);
     }
+});
+
+// Khởi động web server
+app.get('/', (req, res) => {
+    res.send('Bot is running!');
+});
+
+app.listen(port, () => {
+    console.log(`Web server is running on port ${port}`);
 });
 
 // Đăng nhập bot
