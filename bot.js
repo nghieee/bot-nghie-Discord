@@ -27,34 +27,50 @@ const client = new Client({
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.MessageContent
     ],
-    partials: [Partials.Message, Partials.Channel, Partials.Reaction]
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction],
+    presence: {
+        activities: [{ name: '!help để xem hướng dẫn', type: 'WATCHING' }],
+        status: 'online'
+    }
 });
+
+// Biến để theo dõi trạng thái kết nối
+let isReconnecting = false;
+let lastHeartbeat = Date.now();
 
 // Xử lý sự kiện mất kết nối
 client.on('disconnect', () => {
-    console.log('Bot đã bị ngắt kết nối!');
+    console.log('Bot đã bị ngắt kết nối!', new Date().toISOString());
+    isReconnecting = true;
 });
 
 client.on('error', error => {
-    console.error('Lỗi kết nối:', error);
+    console.error('Lỗi kết nối:', error, new Date().toISOString());
+    isReconnecting = true;
 });
 
 // Tự động kết nối lại khi bị ngắt
 client.on('shardError', error => {
-    console.error('Lỗi WebSocket:', error);
+    console.error('Lỗi WebSocket:', error, new Date().toISOString());
+    isReconnecting = true;
 });
 
 client.on('shardReconnecting', () => {
-    console.log('Đang kết nối lại...');
+    console.log('Đang kết nối lại...', new Date().toISOString());
+    isReconnecting = true;
 });
 
 client.on('shardResume', () => {
-    console.log('Đã kết nối lại thành công!');
+    console.log('Đã kết nối lại thành công!', new Date().toISOString());
+    isReconnecting = false;
+    lastHeartbeat = Date.now();
 });
 
 // Đăng ký các event handler
 client.on('ready', () => {
-    console.log(`Đã đăng nhập thành công với tên ${client.user.tag}!`);
+    console.log(`Đã đăng nhập thành công với tên ${client.user.tag}!`, new Date().toISOString());
+    isReconnecting = false;
+    lastHeartbeat = Date.now();
     readyEvent.execute(client);
 });
 
@@ -178,25 +194,68 @@ client.on('guildMemberAdd', async member => {
 
 // Khởi động web server
 app.get('/', (req, res) => {
+    const now = Date.now();
     const status = {
         bot: client.ws.status === 0 ? 'online' : 'offline',
         ping: client.ws.ping,
         uptime: client.uptime,
-        serverCount: client.guilds.cache.size
+        serverCount: client.guilds.cache.size,
+        lastHeartbeat: new Date(lastHeartbeat).toISOString(),
+        timeSinceLastHeartbeat: now - lastHeartbeat,
+        isReconnecting,
+        memory: process.memoryUsage()
     };
     res.json(status);
 });
 
-app.listen(port, () => {
-    console.log(`Web server is running on port ${port}`);
+// Endpoint để kiểm tra health
+app.get('/health', (req, res) => {
+    if (client.ws.status === 0 && !isReconnecting) {
+        res.status(200).json({ status: 'healthy' });
+    } else {
+        res.status(503).json({ 
+            status: 'unhealthy',
+            wsStatus: client.ws.status,
+            isReconnecting,
+            lastHeartbeat: new Date(lastHeartbeat).toISOString()
+        });
+    }
+});
+
+const server = app.listen(port, () => {
+    console.log(`Web server is running on port ${port}`, new Date().toISOString());
+});
+
+// Heartbeat để giữ kết nối
+setInterval(() => {
+    if (client.ws.status === 0) {
+        lastHeartbeat = Date.now();
+        console.log('Heartbeat OK:', new Date().toISOString());
+    } else if (!isReconnecting) {
+        console.log('Kết nối không ổn định, thử kết nối lại...', new Date().toISOString());
+        login();
+    }
+}, 30000); // Kiểm tra mỗi 30 giây
+
+// Xử lý khi process bị kill
+process.on('SIGTERM', () => {
+    console.log('Nhận tín hiệu SIGTERM, đang tắt bot...', new Date().toISOString());
+    client.destroy();
+    server.close();
 });
 
 // Hàm kết nối lại khi gặp lỗi
 function login() {
+    if (isReconnecting) return;
+    
+    isReconnecting = true;
     client.login(process.env.DISCORD_TOKEN).catch(error => {
-        console.error('Lỗi đăng nhập:', error);
-        console.log('Thử kết nối lại sau 5 giây...');
-        setTimeout(login, 5000);
+        console.error('Lỗi đăng nhập:', error, new Date().toISOString());
+        console.log('Thử kết nối lại sau 5 giây...', new Date().toISOString());
+        setTimeout(() => {
+            isReconnecting = false;
+            login();
+        }, 5000);
     });
 }
 
