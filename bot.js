@@ -30,8 +30,34 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+// Xử lý sự kiện mất kết nối
+client.on('disconnect', () => {
+    console.log('Bot đã bị ngắt kết nối!');
+});
+
+client.on('error', error => {
+    console.error('Lỗi kết nối:', error);
+});
+
+// Tự động kết nối lại khi bị ngắt
+client.on('shardError', error => {
+    console.error('Lỗi WebSocket:', error);
+});
+
+client.on('shardReconnecting', () => {
+    console.log('Đang kết nối lại...');
+});
+
+client.on('shardResume', () => {
+    console.log('Đã kết nối lại thành công!');
+});
+
 // Đăng ký các event handler
-client.on('ready', () => readyEvent.execute(client));
+client.on('ready', () => {
+    console.log(`Đã đăng nhập thành công với tên ${client.user.tag}!`);
+    readyEvent.execute(client);
+});
+
 client.on('messageReactionAdd', (reaction, user) => reactionEvent.execute(reaction, user));
 client.on('messageReactionRemove', (reaction, user) => reactionEvent.reactionRemove.execute(reaction, user));
 
@@ -152,12 +178,27 @@ client.on('guildMemberAdd', async member => {
 
 // Khởi động web server
 app.get('/', (req, res) => {
-    res.send('Bot is running!');
+    const status = {
+        bot: client.ws.status === 0 ? 'online' : 'offline',
+        ping: client.ws.ping,
+        uptime: client.uptime,
+        serverCount: client.guilds.cache.size
+    };
+    res.json(status);
 });
 
 app.listen(port, () => {
     console.log(`Web server is running on port ${port}`);
 });
 
-// Đăng nhập bot
-client.login(process.env.DISCORD_TOKEN);
+// Hàm kết nối lại khi gặp lỗi
+function login() {
+    client.login(process.env.DISCORD_TOKEN).catch(error => {
+        console.error('Lỗi đăng nhập:', error);
+        console.log('Thử kết nối lại sau 5 giây...');
+        setTimeout(login, 5000);
+    });
+}
+
+// Bắt đầu kết nối
+login();
